@@ -3,6 +3,10 @@
 // conv_tile version 1.0 
 
 #include "convolution.h"
+#include "algorithm"
+
+using namespace std;
+
 
 void conv_tile(const float* in, float* out, const float* ker,
                int H, int W, int K) {
@@ -13,7 +17,7 @@ void conv_tile(const float* in, float* out, const float* ker,
     for (int ii = 0; ii < H; ii += TILE) {
         for (int jj = 0; jj < W; jj += TILE) {
 
-            int i_end = (ii + TILE) < H ? (ii + TILE) : H;
+            int i_end = min(ii+TILE,H); // (ii + TILE) < H ? (ii + TILE) : H;
             int j_end = (jj + TILE) < W ? (jj + TILE) : W;
 
             for (int oy = ii; oy < i_end; oy++) {
