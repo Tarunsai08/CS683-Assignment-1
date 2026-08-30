@@ -6,28 +6,10 @@ void conv_unroll(const float* in, float* out, const float* ker,
     // TODO(student): replace this placeholder with your unrolled implementation.
     const int p = K / 2;
     const int in_stride = W + 2 * p;  // padded row stride
-    // <<<------ Approach 1: Unrolled only Kernel ------->>>
-    for (int oy = 0; oy < H; ++oy) {
-        for (int ox = 0; ox < W; ++ox) {
-            float acc = 0.0f;
-            for (int ky = 0; ky < K; ++ky) {
-                int kx;
-                for (kx = 0; kx + 2 < K; kx += 3) {
-                    acc += in[(oy + ky) * in_stride + (ox + kx)] * ker[ky * K + kx];
-                    acc += in[(oy + ky) * in_stride + (ox + kx + 1)] * ker[ky * K + kx + 1];
-                    acc += in[(oy + ky) * in_stride + (ox + kx + 2)] * ker[ky * K + kx + 2];
-                }
-                for (; kx < K; ++kx) {
-                    acc += in[(oy + ky) * in_stride + (ox + kx)] * ker[ky * K + kx];
-                }
-            }
-            out[oy * W + ox] = acc;
-        }
-    }
 
-    // <<<------ Approach 2: Unrolled Kernel and input ------->>>
+    // <<<------ Approach: Unrolled Kernel's and input's innerloop ------->>>
     for (int oy = 0; oy < H; ++oy) {
-        // Unroll ox by 8
+        // Unrolling 7 times (ox) since W is divisible by 8
         for (int ox = 0; ox < W; ox += 8) {
             float acc0 = 0.0f;
             float acc1 = 0.0f;
@@ -38,8 +20,8 @@ void conv_unroll(const float* in, float* out, const float* ker,
             float acc6 = 0.0f;
             float acc7 = 0.0f;
             for (int ky = 0; ky < K; ++ky) {
-                // Unroll kx by 3
                 for (int kx = 0; kx + 2 < K; kx += 3) {
+                    // Unrolling 2 times (kx) since Kernel minimum size is 3 (works for multiples of 3)
                     acc0 += in[(oy + ky) * in_stride + (ox + kx)] * ker[ky * K + kx];
                     acc0 += in[(oy + ky) * in_stride + (ox + kx + 1)] * ker[ky * K + kx + 1];
                     acc0 += in[(oy + ky) * in_stride + (ox + kx + 2)] * ker[ky * K + kx + 2];
@@ -73,7 +55,7 @@ void conv_unroll(const float* in, float* out, const float* ker,
                     acc7 += in[(oy + ky) * in_stride + (ox + 7 + kx + 2)] * ker[ky * K + kx + 2];
                 }
                 for (int kx = (K / 3) * 3; kx < K; ++kx) {
-
+                    // For any left out kernel indices, will run atmost 2 times
                     acc0 += in[(oy + ky) * in_stride + ox + kx] * ker[ky * K + kx];
                     acc1 += in[(oy + ky) * in_stride + ox + 1 + kx] * ker[ky * K + kx];
                     acc2 += in[(oy + ky) * in_stride + ox + 2 + kx] * ker[ky * K + kx];
