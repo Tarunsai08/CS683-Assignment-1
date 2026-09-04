@@ -1,0 +1,9 @@
+
+ Performance counter stats for './bin/conv tile 2048 2048 3' (3 runs):
+
+     8,102,663,912      instructions                                                            ( +-  0.01% )
+     1,681,035,701      L1-dcache-loads                                                         ( +-  0.01% )
+        22,369,906      L1-dcache-load-misses                                                   ( +-  0.19% )
+
+       0.652337186 +- 0.011971172 seconds time elapsed  ( +-  1.84% )
+
