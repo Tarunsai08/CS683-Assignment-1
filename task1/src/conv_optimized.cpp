@@ -6,8 +6,6 @@ void conv_optimized(const float* in, float* out, const float* ker,
     const int p = K / 2;
     const int in_stride = W + 2 * p;
 
-    // Test these experimentally:
-    // 32, 64, 128, 256
     constexpr int TILE = 2048;
 
     for (int ii = 0; ii < H; ii += TILE) {
@@ -17,53 +15,101 @@ void conv_optimized(const float* in, float* out, const float* ker,
             const int j_end = (jj + TILE < W) ? jj + TILE : W;
 
             for (int oy = ii; oy < i_end; ++oy) {
-                const float* in_base = in + oy * in_stride;
                 float* out_row = out + oy * W;
 
-                int ox = jj;
+                for (int ky = 0; ky < K; ++ky) {
+                    const float* in_row =
+                        in + (oy + ky) * in_stride;
 
-                // SIMD: 8 output pixels at a time.
-                for (; ox + 8 <= j_end; ox += 8) {
-                    __m256 acc = _mm256_setzero_ps();
+                    const float* ker_row =
+                        ker + ky * K;
 
-                    for (int ky = 0; ky < K; ++ky) {
-                        const float* in_row =
-                            in_base + ky * in_stride + ox;
+                    for (int kx = 0; kx < K; ++kx) {
+                        const float w = ker_row[kx];
+                        const __m256 kernel = _mm256_set1_ps(w);
 
-                        const float* ker_row =
-                            ker + ky * K;
+                        int ox = jj;
 
-                        for (int kx = 0; kx < K; ++kx) {
-                            const __m256 input =
-                                _mm256_loadu_ps(in_row + kx);
+                        for (; ox + 32 <= j_end; ox += 32) {
+                            const float* in_ptr = in_row + ox + kx;
 
-                            const __m256 kernel =
-                                _mm256_set1_ps(ker_row[kx]);
+                            __m256 v0 = _mm256_loadu_ps(in_ptr);
+                            __m256 v1 = _mm256_loadu_ps(in_ptr + 8);
+                            __m256 v2 = _mm256_loadu_ps(in_ptr + 16);
+                            __m256 v3 = _mm256_loadu_ps(in_ptr + 24);
 
-                            acc = _mm256_fmadd_ps(input, kernel, acc);
+                            if (ky == 0 && kx == 0) {
+                                _mm256_storeu_ps(
+                                    out_row + ox,
+                                    _mm256_mul_ps(v0, kernel));
+
+                                _mm256_storeu_ps(
+                                    out_row + ox + 8,
+                                    _mm256_mul_ps(v1, kernel));
+
+                                _mm256_storeu_ps(
+                                    out_row + ox + 16,
+                                    _mm256_mul_ps(v2, kernel));
+
+                                _mm256_storeu_ps(
+                                    out_row + ox + 24,
+                                    _mm256_mul_ps(v3, kernel));
+                            } else {
+                                __m256 o0 =
+                                    _mm256_loadu_ps(out_row + ox);
+                                __m256 o1 =
+                                    _mm256_loadu_ps(out_row + ox + 8);
+                                __m256 o2 =
+                                    _mm256_loadu_ps(out_row + ox + 16);
+                                __m256 o3 =
+                                    _mm256_loadu_ps(out_row + ox + 24);
+
+                                o0 = _mm256_fmadd_ps(v0, kernel, o0);
+                                o1 = _mm256_fmadd_ps(v1, kernel, o1);
+                                o2 = _mm256_fmadd_ps(v2, kernel, o2);
+                                o3 = _mm256_fmadd_ps(v3, kernel, o3);
+
+                                _mm256_storeu_ps(out_row + ox, o0);
+                                _mm256_storeu_ps(out_row + ox + 8, o1);
+                                _mm256_storeu_ps(out_row + ox + 16, o2);
+                                _mm256_storeu_ps(out_row + ox + 24, o3);
+                            }
+                        }
+
+                        for (; ox + 8 <= j_end; ox += 8) {
+                            const float* in_ptr =
+                                in_row + ox + kx;
+
+                            __m256 input =
+                                _mm256_loadu_ps(in_ptr);
+
+                            if (ky == 0 && kx == 0) {
+                                _mm256_storeu_ps(
+                                    out_row + ox,
+                                    _mm256_mul_ps(input, kernel));
+                            } else {
+                                __m256 output =
+                                    _mm256_loadu_ps(out_row + ox);
+
+                                output =
+                                    _mm256_fmadd_ps(
+                                        input, kernel, output);
+
+                                _mm256_storeu_ps(
+                                    out_row + ox, output);
+                            }
+                        }
+
+                        for (; ox < j_end; ++ox) {
+                            float value =
+                                in_row[ox + kx] * w;
+
+                            if (ky == 0 && kx == 0)
+                                out_row[ox] = value;
+                            else
+                                out_row[ox] += value;
                         }
                     }
-
-                    _mm256_storeu_ps(out_row + ox, acc);
-                }
-
-                // Scalar tail inside the tile.
-                for (; ox < j_end; ++ox) {
-                    float acc = 0.0f;
-
-                    for (int ky = 0; ky < K; ++ky) {
-                        const float* in_row =
-                            in_base + ky * in_stride + ox;
-
-                        const float* ker_row =
-                            ker + ky * K;
-
-                        for (int kx = 0; kx < K; ++kx) {
-                            acc += in_row[kx] * ker_row[kx];
-                        }
-                    }
-
-                    out_row[ox] = acc;
                 }
             }
         }
