@@ -7,13 +7,14 @@
 static constexpr int JB = 4;  // register-block width: output columns computed together
 
 // Target working-set size (A-panel + B-panel) per tile, in bytes. Sized for this
-// machine's per-P-core L2 slice (~1.25 MiB on a 12th-gen i5-12450H), leaving headroom
 // for C writes and other cache pressure. Tune this constant if you move to another CPU.
+
 static constexpr std::size_t kTargetBytes = 600 * 1024;
 
 // Picks BM (rows of A per tile) and BN (rows of B per tile) so that
 // (BM + BN) * K * 4 bytes stays close to kTargetBytes, regardless of K.
 // B gets a larger share since it is reused across every row of the A-tile.
+
 static inline void compute_tile_sizes(int K, int& BM, int& BN) {
     const std::size_t bytes_per_row = static_cast<std::size_t>(K) * sizeof(float);
     std::size_t max_rows = kTargetBytes / bytes_per_row;
