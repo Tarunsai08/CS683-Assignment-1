@@ -11,7 +11,7 @@ sudo wrmsr -p $CORE $MSR 0xf
 sudo rdmsr -p $CORE $MSR
 
 echo "Running benchmark (pinned to core $CORE)..."
-taskset -c $CORE ./bin/matmul prefetch 1024 1024 1024 "$@"
+taskset -c $CORE ./bin/matmul prefetch 1024 1024 1024 42 "$@"
 
 echo "Restoring original MSR value ($ORIG)..."
 sudo wrmsr -p $CORE $MSR $ORIG
