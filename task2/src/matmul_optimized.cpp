@@ -1,174 +1,189 @@
 #include <immintrin.h>
 #include "matmul.h"
 
-static inline float hsum256(__m256 x) {
-    __m128 lo = _mm256_castps256_ps128(x);
-    __m128 hi = _mm256_extractf128_ps(x, 1);
-
-    __m128 sum = _mm_add_ps(lo, hi);
-    sum = _mm_hadd_ps(sum, sum);
-    sum = _mm_hadd_ps(sum, sum);
-
-    return _mm_cvtss_f32(sum);
-}
-
-static inline void kernel_4x2(
-    const float* A,
-    const float* B,
-    float* C,
-    int i,
-    int j,
-    int K,
-    int lda,
-    int ldb,
-    int ldc) {
-
-    float s00 = 0.0f;
-    float s01 = 0.0f;
-    float s10 = 0.0f;
-    float s11 = 0.0f;
-    float s20 = 0.0f;
-    float s21 = 0.0f;
-    float s30 = 0.0f;
-    float s31 = 0.0f;
-
-    constexpr int BK = 256;
-
-    for (int kk = 0; kk < K; kk += BK) {
-        const int kend = (kk + BK < K) ? kk + BK : K;
-
-        __m256 acc00 = _mm256_setzero_ps();
-        __m256 acc01 = _mm256_setzero_ps();
-        __m256 acc10 = _mm256_setzero_ps();
-        __m256 acc11 = _mm256_setzero_ps();
-        __m256 acc20 = _mm256_setzero_ps();
-        __m256 acc21 = _mm256_setzero_ps();
-        __m256 acc30 = _mm256_setzero_ps();
-        __m256 acc31 = _mm256_setzero_ps();
-
-        int k = kk;
-
-        for (; k + 7 < kend; k += 8) {
-            __m256 b0 =
-                _mm256_loadu_ps(B + j * ldb + k);
-            __m256 b1 =
-                _mm256_loadu_ps(B + (j + 1) * ldb + k);
-
-            __m256 a0 =
-                _mm256_loadu_ps(A + i * lda + k);
-            __m256 a1 =
-                _mm256_loadu_ps(A + (i + 1) * lda + k);
-            __m256 a2 =
-                _mm256_loadu_ps(A + (i + 2) * lda + k);
-            __m256 a3 =
-                _mm256_loadu_ps(A + (i + 3) * lda + k);
-
-            acc00 = _mm256_fmadd_ps(a0, b0, acc00);
-            acc01 = _mm256_fmadd_ps(a0, b1, acc01);
-
-            acc10 = _mm256_fmadd_ps(a1, b0, acc10);
-            acc11 = _mm256_fmadd_ps(a1, b1, acc11);
-
-            acc20 = _mm256_fmadd_ps(a2, b0, acc20);
-            acc21 = _mm256_fmadd_ps(a2, b1, acc21);
-
-            acc30 = _mm256_fmadd_ps(a3, b0, acc30);
-            acc31 = _mm256_fmadd_ps(a3, b1, acc31);
-        }
-
-        s00 += hsum256(acc00);
-        s01 += hsum256(acc01);
-        s10 += hsum256(acc10);
-        s11 += hsum256(acc11);
-        s20 += hsum256(acc20);
-        s21 += hsum256(acc21);
-        s30 += hsum256(acc30);
-        s31 += hsum256(acc31);
-
-        for (; k < kend; ++k) {
-            const float b0 = B[j * ldb + k];
-            const float b1 = B[(j + 1) * ldb + k];
-
-            const float a0 = A[i * lda + k];
-            const float a1 = A[(i + 1) * lda + k];
-            const float a2 = A[(i + 2) * lda + k];
-            const float a3 = A[(i + 3) * lda + k];
-
-            s00 += a0 * b0;
-            s01 += a0 * b1;
-
-            s10 += a1 * b0;
-            s11 += a1 * b1;
-
-            s20 += a2 * b0;
-            s21 += a2 * b1;
-
-            s30 += a3 * b0;
-            s31 += a3 * b1;
-        }
-    }
-
-    C[i * ldc + j] = s00;
-    C[i * ldc + j + 1] = s01;
-
-    C[(i + 1) * ldc + j] = s10;
-    C[(i + 1) * ldc + j + 1] = s11;
-
-    C[(i + 2) * ldc + j] = s20;
-    C[(i + 2) * ldc + j + 1] = s21;
-
-    C[(i + 3) * ldc + j] = s30;
-    C[(i + 3) * ldc + j + 1] = s31;
-}
-
 void matmul_optimized(const float* A, const float* B, float* C,
                       int M, int N, int K,
                       int lda, int ldb, int ldc) {
+    constexpr int BLOCK_M = 128;
+    constexpr int BLOCK_N = 32;
+    constexpr int BLOCK_K = 256;
 
-    constexpr int BM = 128;
-    constexpr int BN = 32;
+    for (int ii = 0; ii < M; ii += BLOCK_M) {
+        const int i_end = (ii + BLOCK_M < M) ? ii + BLOCK_M : M;
 
-    for (int ii = 0; ii < M; ii += BM) {
-        const int i_end = (ii + BM < M) ? ii + BM : M;
+        for (int jj = 0; jj < N; jj += BLOCK_N) {
+            const int j_end = (jj + BLOCK_N < N) ? jj + BLOCK_N : N;
 
-        for (int jj = 0; jj < N; jj += BN) {
-            const int j_end = (jj + BN < N) ? jj + BN : N;
+            for (int i = ii; i + 3 < i_end; i += 4) {
 
-            int i = ii;
+                for (int j = jj; j + 1 < j_end; j += 2) {
 
-            for (; i + 3 < i_end; i += 4) {
-                int j = jj;
+                    float c00 = 0.0f;
+                    float c01 = 0.0f;
+                    float c10 = 0.0f;
+                    float c11 = 0.0f;
+                    float c20 = 0.0f;
+                    float c21 = 0.0f;
+                    float c30 = 0.0f;
+                    float c31 = 0.0f;
 
-                for (; j + 1 < j_end; j += 2) {
-                    kernel_4x2(
-                        A, B, C,
-                        i, j,
-                        K,
-                        lda, ldb, ldc);
+                    for (int kk = 0; kk < K; kk += BLOCK_K) {
+                        const int k_end =
+                            (kk + BLOCK_K < K) ? kk + BLOCK_K : K;
+
+                        __m256 v00 = _mm256_setzero_ps();
+                        __m256 v01 = _mm256_setzero_ps();
+                        __m256 v10 = _mm256_setzero_ps();
+                        __m256 v11 = _mm256_setzero_ps();
+                        __m256 v20 = _mm256_setzero_ps();
+                        __m256 v21 = _mm256_setzero_ps();
+                        __m256 v30 = _mm256_setzero_ps();
+                        __m256 v31 = _mm256_setzero_ps();
+
+                        int k = kk;
+
+                        for (; k + 7 < k_end; k += 8) {
+                            const __m256 b0 =
+                                _mm256_loadu_ps(B + j * ldb + k);
+                            const __m256 b1 =
+                                _mm256_loadu_ps(B + (j + 1) * ldb + k);
+
+                            const __m256 a0 =
+                                _mm256_loadu_ps(A + i * lda + k);
+                            const __m256 a1 =
+                                _mm256_loadu_ps(A + (i + 1) * lda + k);
+                            const __m256 a2 =
+                                _mm256_loadu_ps(A + (i + 2) * lda + k);
+                            const __m256 a3 =
+                                _mm256_loadu_ps(A + (i + 3) * lda + k);
+
+                            v00 = _mm256_fmadd_ps(a0, b0, v00);
+                            v01 = _mm256_fmadd_ps(a0, b1, v01);
+
+                            v10 = _mm256_fmadd_ps(a1, b0, v10);
+                            v11 = _mm256_fmadd_ps(a1, b1, v11);
+
+                            v20 = _mm256_fmadd_ps(a2, b0, v20);
+                            v21 = _mm256_fmadd_ps(a2, b1, v21);
+
+                            v30 = _mm256_fmadd_ps(a3, b0, v30);
+                            v31 = _mm256_fmadd_ps(a3, b1, v31);
+                        }
+
+                        __m128 lo, hi, sum;
+
+                        lo = _mm256_castps256_ps128(v00);
+                        hi = _mm256_extractf128_ps(v00, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c00 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v01);
+                        hi = _mm256_extractf128_ps(v01, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c01 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v10);
+                        hi = _mm256_extractf128_ps(v10, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c10 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v11);
+                        hi = _mm256_extractf128_ps(v11, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c11 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v20);
+                        hi = _mm256_extractf128_ps(v20, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c20 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v21);
+                        hi = _mm256_extractf128_ps(v21, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c21 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v30);
+                        hi = _mm256_extractf128_ps(v30, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c30 += _mm_cvtss_f32(sum);
+
+                        lo = _mm256_castps256_ps128(v31);
+                        hi = _mm256_extractf128_ps(v31, 1);
+                        sum = _mm_add_ps(lo, hi);
+                        sum = _mm_hadd_ps(sum, sum);
+                        sum = _mm_hadd_ps(sum, sum);
+                        c31 += _mm_cvtss_f32(sum);
+
+                        for (; k < k_end; ++k) {
+                            const float b0 = B[j * ldb + k];
+                            const float b1 = B[(j + 1) * ldb + k];
+
+                            const float a0 = A[i * lda + k];
+                            const float a1 = A[(i + 1) * lda + k];
+                            const float a2 = A[(i + 2) * lda + k];
+                            const float a3 = A[(i + 3) * lda + k];
+
+                            c00 += a0 * b0;
+                            c01 += a0 * b1;
+
+                            c10 += a1 * b0;
+                            c11 += a1 * b1;
+
+                            c20 += a2 * b0;
+                            c21 += a2 * b1;
+
+                            c30 += a3 * b0;
+                            c31 += a3 * b1;
+                        }
+                    }
+
+                    C[i * ldc + j] = c00;
+                    C[i * ldc + j + 1] = c01;
+
+                    C[(i + 1) * ldc + j] = c10;
+                    C[(i + 1) * ldc + j + 1] = c11;
+
+                    C[(i + 2) * ldc + j] = c20;
+                    C[(i + 2) * ldc + j + 1] = c21;
+
+                    C[(i + 3) * ldc + j] = c30;
+                    C[(i + 3) * ldc + j + 1] = c31;
                 }
 
-                for (; j < j_end; ++j) {
+                for (int j = (j_end & ~1); j < j_end; ++j) {
                     for (int r = i; r < i + 4; ++r) {
                         float sum = 0.0f;
 
-                        for (int k = 0; k < K; ++k) {
+                        for (int k = 0; k < K; ++k)
                             sum += A[r * lda + k] *
                                    B[j * ldb + k];
-                        }
 
                         C[r * ldc + j] = sum;
                     }
                 }
             }
 
-            for (; i < i_end; ++i) {
+            for (int i = (i_end & ~3); i < i_end; ++i) {
                 for (int j = jj; j < j_end; ++j) {
                     float sum = 0.0f;
 
-                    for (int k = 0; k < K; ++k) {
+                    for (int k = 0; k < K; ++k)
                         sum += A[i * lda + k] *
                                B[j * ldb + k];
-                    }
 
                     C[i * ldc + j] = sum;
                 }
