@@ -1,9 +1,0 @@
-
- Performance counter stats for './bin/conv simd 2048 2048 3' (3 runs):
-
-     4,838,012,518      instructions                                                            ( +-  0.02% )
-     1,009,064,126      L1-dcache-loads                                                         ( +-  0.02% )
-        20,432,840      L1-dcache-load-misses                                                   ( +-  0.31% )
-
-       0.408717610 +- 0.002031545 seconds time elapsed  ( +-  0.50% )
-

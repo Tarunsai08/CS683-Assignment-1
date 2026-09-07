@@ -1,9 +1,0 @@
-
- Performance counter stats for './bin/conv tile 256 256 3' (3 runs):
-
-       129,418,725      instructions                                                            ( +-  0.01% )
-        26,992,079      L1-dcache-loads                                                         ( +-  0.02% )
-           294,100      L1-dcache-load-misses                                                   ( +-  0.78% )
-
-       0.011350339 +- 0.000260070 seconds time elapsed  ( +-  2.29% )
-
