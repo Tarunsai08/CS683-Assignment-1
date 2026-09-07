@@ -6,7 +6,7 @@
 
 #include "matmul.h"
 
-static constexpr int JB = 4; // register-block width
+static constexpr int JB = 8; // register-block width
 
 static constexpr int PREFETCH_DISTANCE = 4;
 
