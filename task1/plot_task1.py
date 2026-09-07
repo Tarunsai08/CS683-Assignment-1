@@ -12,6 +12,9 @@ def read_csv(name):
     with (OUT / name).open() as f:
         return list(csv.DictReader(f))
 
+# -------------------------------
+# Task 1A / 1D technique comparison
+# -------------------------------
 rows = read_csv("task1_stages.csv")
 
 for K in sorted(set(int(r["K"]) for r in rows)):
@@ -39,7 +42,10 @@ for K in sorted(set(int(r["K"]) for r in rows)):
     plt.savefig(PLOT / f"task1D_speedup_K{K}.png", dpi=220)
     plt.close()
 
+# -------------------------------
 # Task 1B — speedup vs matrix size
+# Choose the tile sizes present in the data.
+# -------------------------------
 rows = read_csv("task1B.csv")
 tiles = sorted(set(int(r["tile"]) for r in rows))
 sizes = sorted(set(int(r["size"]) for r in rows))
@@ -61,7 +67,9 @@ plt.tight_layout()
 plt.savefig(PLOT / "task1B_speedup_vs_size.png", dpi=220)
 plt.close()
 
+# -------------------------------
 # Task 1B — L1-D MPKI vs matrix size
+# -------------------------------
 plt.figure(figsize=(9, 5))
 for T in tiles:
     rr = [r for r in rows if int(r["tile"]) == T]
@@ -84,7 +92,9 @@ plt.tight_layout()
 plt.savefig(PLOT / "task1B_L1D_MPKI_vs_size.png", dpi=220)
 plt.close()
 
+# -------------------------------
 # Task 1C — SIMD width comparison
+# -------------------------------
 rows = read_csv("task1C.csv")
 widths = sorted(set(int(r["width_bits"]) for r in rows))
 

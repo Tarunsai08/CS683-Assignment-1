@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ============================================================
+# CS683 PA-1 TASK 1 DATA COLLECTION
+#
+# Run from the task1 directory containing:
+#   src/conv_naive.cpp
+#   src/conv_reorder.cpp
+#   src/conv_unroll.cpp
+#   src/conv_tile.cpp
+#   src/conv_simd.cpp
+#   src/conv_optimized.cpp
+#   src/main.cpp
+#   bin/conv (built by make)
+#
+# This script:
+#   1. Measures timing/speedup across matrix sizes.
+#   2. Sweeps tile sizes for Task 1B.
+#   3. Measures process-level instructions and L1-D MPKI using perf.
+#   4. Creates a temporary 128-bit SIMD version for Task 1C.
+#   5. Leaves your original source files restored.
+#
+# IMPORTANT:
+# The provided grading harness times a stage correctly, but perf
+# around ./bin/conv also includes the harness/reference work.
+# Therefore the perf MPKI/instruction values collected here are
+# PROCESS-LEVEL measurements. Use them for the report only if
+# your instructor accepts harness-level perf measurements.
+# For stage-only counters, see the notes printed at the end.
+# ============================================================
+
 OUT="task1_results"
 mkdir -p "$OUT"
 
@@ -61,7 +90,9 @@ perf_value() {
     ' "$f"
 }
 
+# ------------------------------------------------------------
 # Timing/speedup data for all stages and sizes.
+# ------------------------------------------------------------
 echo "size,K,naive_ms,reorder_ms,reorder_speedup,unroll_ms,unroll_speedup,tile_ms,tile_speedup,simd_ms,simd_speedup,optimized_ms,optimized_speedup" \
     > "$OUT/task1_stages.csv"
 
@@ -88,7 +119,10 @@ for N in "${SIZES[@]}"; do
     done
 done
 
+# ------------------------------------------------------------
 # Task 1B: tile sweep.
+# Note: conv_tile.cpp has TILE as a source constant.
+# ------------------------------------------------------------
 echo "size,tile,naive_ms,tile_ms,tile_speedup,process_instructions,process_L1_loads,process_L1_misses,process_L1_MPKI" \
     > "$OUT/task1B.csv"
 
@@ -122,7 +156,9 @@ for N in "${SIZES[@]}"; do
     done
 done
 
+# ------------------------------------------------------------
 # Task 1C: current 256-bit SIMD.
+# ------------------------------------------------------------
 echo "size,width_bits,time_ms,speedup,instructions,L1_loads,L1_misses,L1_MPKI" \
     > "$OUT/task1C.csv"
 
@@ -151,6 +187,10 @@ for N in "${SIZES[@]}"; do
     echo "$N,256,$simd_ms,$speed,${ins:-NA},${l1loads:-NA},${l1miss:-NA},$mpki" >> "$OUT/task1C.csv"
 done
 
+# ------------------------------------------------------------
+# Create a temporary 128-bit implementation.
+# Same algorithm/order, 4 floats per vector.
+# ------------------------------------------------------------
 cat > src/conv_simd.cpp <<'EOF'
 #include <immintrin.h>
 #include "convolution.h"
@@ -207,6 +247,7 @@ for N in "${SIZES[@]}"; do
     echo "$N,128,$simd_ms,$speed,${ins:-NA},${l1loads:-NA},${l1miss:-NA},$mpki" >> "$OUT/task1C.csv"
 done
 
+# Restore user's original sources/build.
 restore
 
 echo
@@ -223,4 +264,5 @@ echo
 echo "IMPORTANT: perf values collected around ./bin/conv are"
 echo "process-level because the supplied harness runs the reference"
 echo "and the selected stage, plus correctness/timing machinery."
+echo "============================================================"
 echo "============================================================"

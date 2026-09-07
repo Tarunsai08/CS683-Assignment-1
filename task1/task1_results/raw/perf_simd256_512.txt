@@ -1,0 +1,9 @@
+
+ Performance counter stats for './bin/conv simd 512 512 3' (3 runs):
+
+       305,528,985      instructions                                                            ( +-  0.03% )
+        63,863,001      L1-dcache-loads                                                         ( +-  0.03% )
+           915,632      L1-dcache-load-misses                                                   ( +-  1.10% )
+
+       0.028490873 +- 0.000057629 seconds time elapsed  ( +-  0.20% )
+
