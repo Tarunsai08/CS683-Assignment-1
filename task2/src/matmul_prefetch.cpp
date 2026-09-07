@@ -8,7 +8,7 @@
 
 static constexpr int JB = 8; // register-block width
 
-static constexpr int PREFETCH_DISTANCE = 16;
+static constexpr int PREFETCH_DISTANCE = 8;
 
 // Target working-set size
 static constexpr std::size_t kTargetBytes = 600 * 1024;
